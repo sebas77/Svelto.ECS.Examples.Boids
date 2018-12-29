@@ -7,21 +7,10 @@ using Unity.Transforms;
 using Unity.Mathematics;
 using Unity.Rendering;
 
-namespace Boid.SveltoECS.SampleD
+namespace Boid.SveltoECS.Sample1
 {
     public class Bootstrap : MonoBehaviour 
     {
-        public static Bootstrap Instance 
-        { 
-            get; 
-            private set; 
-        }
-    
-        public static Param Param
-        {
-            get { return Instance.param; }
-        }
-    
         [SerializeField]
         public int boidCount = 100;
     
@@ -37,30 +26,39 @@ namespace Boid.SveltoECS.SampleD
         [SerializeField]
         Material material;
     
-        void Awake()
+        void OnDestroy()
         {
-            Instance = this;
+            _enginesRoot.Dispose();
         }
-    
+
         void Start()
         {
+            QualitySettings.vSyncCount = -1;
+#if !ENABLE_IL2CPP            
+            Application.targetFrameRate = 60;
+#endif    
+            
             UnityECS();
             SveltoECS();
         }
 
         void SveltoECS()
         {
+            //creates the _enginesRoot, for more information read my svelto.ECS articles
             _enginesRoot = new EnginesRoot(new UnityEntitySubmissionScheduler());
+            //this will be used to build entities
             var entityFactory = _enginesRoot.GenerateEntityFactory();
             var random = new Unity.Mathematics.Random(853);
             
             for (int i = 0; i < boidCount; ++i)
             {
-                var initSpeed = Param.initSpeed;
+                var initSpeed = param.initSpeed;
 
+                //build entities in the BOIDS_GROUP exclusive group
                 var entityStructInitializer = entityFactory.BuildEntity<BoidEntityDecriptor>(i, GAME_GROUPS.BOIDS_GROUP);
                 var nextFloat3 = random.NextFloat3(1f);
                 var float3 = random.NextFloat3Direction() * initSpeed;
+                //init them with these default values
                 entityStructInitializer.Init(new BoidEntityStruct()
                 {
                     position = new SVector3 { x = nextFloat3.x, y = nextFloat3.y, z = nextFloat3.z },
@@ -70,10 +68,12 @@ namespace Boid.SveltoECS.SampleD
                 });
             }
             
-            ThreadSynchronizationSignal _signal = new ThreadSynchronizationSignal("name", 10000);
+            //create a synchronization enumerator to be used inside the Svelto.Tasks
+            ThreadSynchronizationSignal _signal = new ThreadSynchronizationSignal("name");
             
+            //add the engines we are going to use
             _enginesRoot.AddEngine(new BoidsSyncronizationEngine(_unityECSGroup, _signal));
-            _enginesRoot.AddEngine(new BoidsSimulationSystem(_signal));
+            _enginesRoot.AddEngine(new BoidsSimulationEngine(_signal, param, boidCount));
         }
 
         void UnityECS()

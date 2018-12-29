@@ -1,7 +1,7 @@
 ﻿using Svelto.ECS;
 using Unity.Mathematics;
 
-namespace Boid.SveltoECS.SampleD
+namespace Boid.SveltoECS.Sample1
 {
     static class GAME_GROUPS
     {

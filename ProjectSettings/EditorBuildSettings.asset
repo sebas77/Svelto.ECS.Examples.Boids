@@ -6,6 +6,6 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
-    path: Assets/Boid-SveltoECS-SampleD-JobDependencies/Boid-SveltoECS-SampleD.unity
-    guid: 76f9229bd2d8573458ae00395c2cf2fa
+    path: Assets/Boid-SveltoECS-Sample1-MultiThreadedParallelTaskCollection/Boid-SveltoECS-Sample1.unity
+    guid: 14eb9bdc82d441d4999cd54d08428b6e
   m_configObjects: {}

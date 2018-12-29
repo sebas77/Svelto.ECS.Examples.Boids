@@ -1,64 +1,79 @@
-﻿using System.Linq;
-using Svelto.DataStructures;
-using Svelto.Tasks.Parallelism;
+﻿using Svelto.Tasks.Parallelism;
 using Svelto.Utilities;
 using Unity.Mathematics;
 using UnityEngine;
 
-namespace Boid.SveltoECS.SampleD
+namespace Boid.SveltoECS.Sample1
 {
-    public partial class BoidsSimulationSystem
+    public partial class BoidsSimulationEngine
     {
-        struct BoidSimulationJob : IMultiThreadParallelizable
+        /// <summary>
+        /// ISveltoJob is a convenient  way to add jobs even if they are not enumerator. It's inspired by the
+        /// Unity Jobs interface. 
+        /// </summary>
+        struct BoidSimulationJob : ISveltoJob
         {
-            readonly float weight;
-            readonly float scale;
-            readonly float thresh;
-            readonly float  _prodThresh;
-            readonly float  _distThresh;
-            readonly float3 _separationWeight;
-            readonly float3 _alignmentWeight;
-            readonly float3 _cohesionWeight;
+            static float   _weight;
+            static float   _scale;
+            static float   _thresh;
+            static float   _prodThresh;
+            static float   _distThresh;
+            static float3  _separationWeight;
+            static float3  _alignmentWeight;
+            static float3  _cohesionWeight;
+            static int[][] _neighbours;
+            static int     _boidsCount;
+            static float   _minSpeed;
+            static float   _maxSpeed;
 
-            readonly int[][] _neighbours;
-            readonly int count;
-
-            public BoidSimulationJob(BoidsSimulationSystem simulation)
+            /// <summary>
+            /// ISveltJob can be only structs, this will be called once and then the values just copied
+            /// (although in this case they are static so it won't even happen)
+            /// </summary>
+            /// <param name="simulation"></param>
+            /// <param name="boidCount"></param>
+            public BoidSimulationJob(BoidsSimulationEngine simulation, int boidCount)
             {
-                scale  = Bootstrap.Param.wallScale * 0.5f;
-                thresh = Bootstrap.Param.wallDistance;
-                weight = Bootstrap.Param.wallWeight;
-                count = Bootstrap.Instance.boidCount;
+                _scale  = simulation.param.wallScale * 0.5f;
+                _thresh = simulation.param.wallDistance;
+                _weight = simulation.param.wallWeight;
+                _boidsCount = boidCount;
                 
-                _prodThresh       = math.cos(math.radians(Bootstrap.Param.neighborFov));
-                _distThresh       = Bootstrap.Param.neighborDistance;
-                _separationWeight = Bootstrap.Param.separationWeight;
-                _alignmentWeight  = Bootstrap.Param.alignmentWeight;
-                _cohesionWeight   = Bootstrap.Param.cohesionWeight;
+                _prodThresh       = math.cos(math.radians(simulation.param.neighborFov));
+                _distThresh       = simulation.param.neighborDistance;
+                _separationWeight = simulation.param.separationWeight;
+                _alignmentWeight  = simulation.param.alignmentWeight;
+                _cohesionWeight   = simulation.param.cohesionWeight;
+                
+                _minSpeed = simulation.param.minSpeed;
+                _maxSpeed = simulation.param.maxSpeed;
 
-                _neighbours = new int[count][];
-                for (int i = 0; i < count; i++)
-                    _neighbours[i] = new int[count];
+                _neighbours = new int[_boidsCount][];
+                for (int i = 0; i < _boidsCount; i++)
+                    _neighbours[i] = new int[_boidsCount];
             }
             
-            public void Update(int i)
+            /// <summary>
+            /// I am not really sure why the original author decided to chain Unity jobs, so I kept it simple
+            /// and execute all of them in the same job.
+            /// </summary>
+            /// <param name="jobIndex"></param>
+            public void Update(int jobIndex)
             {
                 var volatileRead = ThreadUtility.VolatileRead(ref _deltaTime);
                 
-                Wall(entities, i, scale, thresh, weight);
+                Wall(entities, jobIndex, _scale, _thresh, _weight);
                 
-                var neighbours = _neighbours[i];
-
-                var currentCount = DetectNeighbour(entities, i, count, neighbours);
-
+                var neighbours = _neighbours[jobIndex];
+                var currentCount = DetectNeighbour(entities, jobIndex, _boidsCount, neighbours);
                 if (currentCount > 0)
                 {
-                    Separation(entities, i, currentCount, neighbours);
-                    AlignmentJob(entities, i, currentCount, neighbours);
-                    CohesionJob(entities, i, currentCount, neighbours);
+                    Separation(entities, jobIndex, currentCount, neighbours);
+                    AlignmentJob(entities, jobIndex, currentCount, neighbours);
+                    CohesionJob(entities, jobIndex, currentCount, neighbours);
                 }
 
-                Move(entities, i, volatileRead);
+                Move(entities, jobIndex, volatileRead);
             }
 
             static void Wall(BoidEntityStruct[] entities, int i, float scale, float thresh, float weight)
@@ -91,34 +106,31 @@ namespace Boid.SveltoECS.SampleD
 
             static void Move(BoidEntityStruct[] entities, int i, float dt)
             {
-                var minSpeed = Bootstrap.Param.minSpeed;
-                var maxSpeed = Bootstrap.Param.maxSpeed / 3;
-
-                ref var v     = ref entities[i].velocity;
+                ref var lastVelocity     = ref entities[i].velocity;
                 ref var accel = ref entities[i].acceleration;
-                v.x += accel.x * dt;
-                v.y += accel.y * dt;
-                v.z += accel.z * dt;
-                var vector3 = new float3(v.x, v.y, v.z);
-                var speed   = math.length(vector3);
-                var dir     = vector3 / speed;
-                var vi      = math.clamp(speed, minSpeed, maxSpeed) * dir;
-                v.x = vi.x;
-                v.y = vi.y;
-                v.z = vi.z;
-                ref var pos3 = ref entities[i].position;
-                var     pos  = new float3(pos3.x, pos3.y, pos3.z);
-                var     pos2 = pos + vi * dt;
+                lastVelocity.x += accel.x * dt;
+                lastVelocity.y += accel.y * dt;
+                lastVelocity.z += accel.z * dt;
+                var velocity = new float3(lastVelocity.x, lastVelocity.y, lastVelocity.z);
+                var speed   = math.length(velocity);
+                var dir     = velocity / speed;
+                var vi      = math.clamp(speed, _minSpeed, _maxSpeed) * dir;
+                lastVelocity.x = vi.x;
+                lastVelocity.y = vi.y;
+                lastVelocity.z = vi.z;
+                ref var lastPos = ref entities[i].position;
+                var     pos  = new float3(lastPos.x, lastPos.y, lastPos.z);
+                var     newPos = pos + vi * dt;
 
-                pos3.x = pos2.x;
-                pos3.y = pos2.y;
-                pos3.z = pos2.z;
+                lastPos.x = newPos.x;
+                lastPos.y = newPos.y;
+                lastPos.z = newPos.z;
                 var     lookRotationSafe = quaternion.LookRotationSafe(dir, new float3(0, 1, 0)).value;
-                ref var rot              = ref entities[i].rotation;
-                rot.x = lookRotationSafe.x;
-                rot.y = lookRotationSafe.y;
-                rot.z = lookRotationSafe.z;
-                rot.w = lookRotationSafe.w;
+                ref var rotation  = ref entities[i].rotation;
+                rotation.x = lookRotationSafe.x;
+                rotation.y = lookRotationSafe.y;
+                rotation.z = lookRotationSafe.z;
+                rotation.w = lookRotationSafe.w;
 
                 accel.x = accel.y = accel.z = 0;
             }
@@ -133,7 +145,7 @@ namespace Boid.SveltoECS.SampleD
                 float3 pos0 = pos.ToFloat3();
                 float3 fwd0 = math.normalize(velocity.ToFloat3());
 
-                for (int i = iindex; i < count; ++i)
+                for (int i = 0; i < count; ++i)
                 {
                     float3 pos1 = entities[i].position.ToFloat3();
                     var    to   = pos1 - pos0;
@@ -175,8 +187,7 @@ namespace Boid.SveltoECS.SampleD
                 accel.z = newaccel.z;
             }
 
-            void AlignmentJob(BoidEntityStruct[]  entities, int iindex, int count,
-                                     int[] _neighbours)
+            void AlignmentJob(BoidEntityStruct[]  entities, int iindex, int count, int[] _neighbours)
             {
                 var averageVelocity = float3.zero;
                 for (int i = 0; i < count; ++i)
@@ -195,8 +206,7 @@ namespace Boid.SveltoECS.SampleD
                 accel.z = newaccel.z;
             }
 
-            void CohesionJob(BoidEntityStruct[]          entities, int iindex, int count,
-                                    int[] _neighbours)
+            void CohesionJob(BoidEntityStruct[] entities, int iindex, int count,int[] _neighbours)
             {
                 var averagePos = float3.zero;
                 for (int i = 0; i < count; ++i)

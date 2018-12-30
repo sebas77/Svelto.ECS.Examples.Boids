@@ -7,7 +7,7 @@ http://www.sebaslab.com/porting-a-boid-simulation-from-unityecs-to-svelto-ecs/
 
 **Download and run:**
 
-as usual this repository use submodules. Do not download them recursively.
+as usual this repository use submodules. Do not download them recursively. I used Unity 2018.3 to run it.
 
 ScreenShot
 ----------

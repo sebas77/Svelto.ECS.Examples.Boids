@@ -34,9 +34,7 @@ namespace Boid.SveltoECS.Sample1
         void Start()
         {
             QualitySettings.vSyncCount = -1;
-#if !ENABLE_IL2CPP            
-            Application.targetFrameRate = 60;
-#endif    
+            Application.targetFrameRate = 120;
             
             UnityECS();
             SveltoECS();

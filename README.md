@@ -1,7 +1,7 @@
 Svelto.ECS/Svelto.Tasks Unity Boids Simulation
 =====================
 
-*Attention: this is not part of the Svelto.ECS miniexamples and, as such, not mantainer. It's OLD*
+**Attention: this is not part of the Svelto.ECS miniexamples and, as such, not mantained. It's OLD**
 
 Added Svelto.ECS porting of the original code forked. Unity Jobs have completely replaced by Svelto.Tasks, while UnityECS is being used only to render the boids and the rest managed by Svelto.ECS. Article with more info here:
 
